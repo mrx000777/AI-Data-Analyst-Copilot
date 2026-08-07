@@ -1,0 +1,12 @@
+streamlit
+pandas
+numpy
+plotly
+openpyxl
+scipy
+matplotlib
+seaborn
+google-generativeai
+python-dotenv
+reportlab
+xlsxwriter
