@@ -4,8 +4,7 @@ from utils.analyser import calculate_average
 
 st.title("🤖 AI Data Analyst")
 
-st.write("Ask questions about your uploaded dataset.")
-
+st.write("Ask questions about your uploaded dataset.")                                             
 if "df" not in st.session_state:
 
     st.warning("Please upload a dataset first.")
