@@ -1,10 +1,10 @@
 from utils.analyser import understand_question
 
 columns = [
-    "price",
-    "quantity",
     "category",
-    "customer_id"
+    "sales",
+    "price",
+    "quantity"
 ]
 
 question = input("Ask a question: ")
