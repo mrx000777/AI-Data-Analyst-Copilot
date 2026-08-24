@@ -28,6 +28,7 @@ Determine whether the user is asking for:
 
 1. A single-column calculation
 2. A group-based calculation
+3. A top N analysis
 
 For a single-column calculation, return:
 
@@ -61,6 +62,20 @@ minimum
 Example:
 
 group,category,sales,sum,maximum
+
+For a top N analysis, return:
+
+top,group_column,value_column,operation,n
+
+Allowed operations:
+average
+sum
+maximum
+minimum
+
+Example:
+
+top,category,sales,sum,5
 
 Return ONLY one line.
 """
@@ -129,3 +144,90 @@ def group_analysis(df, group_column, value_column, operation):
         return "Operation not supported."
 
     return result
+
+
+def top_n_analysis(df, group_column, value_column, operation, n):
+
+    if group_column not in df.columns:
+        return f"Column '{group_column}' does not exist."
+
+    if value_column not in df.columns:
+        return f"Column '{value_column}' does not exist."
+
+    if not pd.api.types.is_numeric_dtype(df[value_column]):
+        return f"Column '{value_column}' is not numeric."
+
+    if operation == "sum":
+
+        result = df.groupby(group_column)[value_column].sum()
+
+    elif operation == "average":
+
+        result = df.groupby(group_column)[value_column].mean()
+
+    elif operation == "maximum":
+
+        result = df.groupby(group_column)[value_column].max()
+
+    elif operation == "minimum":
+
+        result = df.groupby(group_column)[value_column].min()
+
+    else:
+
+        return "Operation not supported."
+
+    return result.sort_values(ascending=False).head(n)
+
+
+def data_quality_analysis(df):
+
+    missing_values = df.isnull().sum()
+
+    missing_values = missing_values[
+        missing_values > 0
+    ]
+
+    duplicate_rows = df.duplicated().sum()
+
+    data_types = df.dtypes
+
+    return {
+        "missing_values": missing_values,
+        "duplicate_rows": duplicate_rows,
+        "data_types": data_types
+    }
+def cleaning_recommendations(df):
+
+    recommendations = []
+
+    missing = df.isnull().sum()
+
+    for column in missing.index:
+
+        if missing[column] > 0:
+
+            percentage = (
+                missing[column] / len(df)
+            ) * 100
+
+            recommendations.append(
+                f"{column} has {missing[column]} missing values "
+                f"({percentage:.2f}%)."
+            )
+
+    duplicates = df.duplicated().sum()
+
+    if duplicates > 0:
+
+        recommendations.append(
+            f"The dataset contains {duplicates} duplicate rows."
+        )
+
+    if len(recommendations) == 0:
+
+        recommendations.append(
+            "No major missing-value or duplicate-row problems were detected."
+        )
+
+    return recommendations
