@@ -1,17 +1,25 @@
 import streamlit as st
+import pandas as pd
+from io import BytesIO
+
 from utils.ai import ask_ai, create_dataset_summary
+
 from utils.analyser import (
     understand_question,
     execute_analysis,
     group_analysis,
     top_n_analysis,
     data_quality_analysis,
-    cleaning_recommendations
+    cleaning_recommendations,
+    choose_chart_type,
+    detect_visualizations
 )
+
 
 st.title("AI Data Analyst")
 
 st.write("Ask questions about your uploaded dataset.")
+
 
 if "analysis_history" not in st.session_state:
     st.session_state["analysis_history"] = []
@@ -30,6 +38,7 @@ if "cleaning_recommendations" not in st.session_state:
 
 if "cleaning_explanation" not in st.session_state:
     st.session_state["cleaning_explanation"] = None
+
 
 if "df" not in st.session_state:
 
@@ -188,7 +197,7 @@ Keep the explanation simple and practical.
 
     if st.button("Generate Cleaning Recommendations"):
 
-        with st.spinner("Generating recommendations..."):
+        with st.spinner("Analyzing data quality..."):
 
             recommendations = cleaning_recommendations(df)
 
@@ -203,12 +212,11 @@ Keep the explanation simple and practical.
             cleaning_prompt = f"""
 You are a professional data analyst.
 
-The following data quality issues were detected
-directly from the dataset:
+The following issues were detected directly from the dataset:
 
 {recommendations_text}
 
-Provide practical data-cleaning recommendations.
+Explain these issues and provide practical recommendations.
 
 For each issue:
 - Explain why it matters.
@@ -216,7 +224,10 @@ For each issue:
 - Do not invent additional problems.
 - Do not invent numbers.
 
-Keep the recommendations simple and concise.
+If potential outliers are mentioned, explain that they should
+be reviewed rather than automatically removed.
+
+Keep the recommendations concise and practical.
 """
 
             st.session_state[
@@ -252,6 +263,113 @@ Keep the recommendations simple and concise.
                     "cleaning_explanation"
                 ]
             )
+
+    st.divider()
+
+    st.subheader("Automatic Visualizations")
+
+    visualizations = detect_visualizations(df)
+
+    if len(visualizations) == 0:
+
+        st.info(
+            "No suitable visualizations were detected."
+        )
+
+    else:
+
+        for visualization in visualizations:
+
+            chart_type = visualization["type"]
+
+            if chart_type == "histogram":
+
+                column = visualization["column"]
+
+                st.write(
+                    f"Distribution of {column}"
+                )
+
+                chart_data = (
+                    df[column]
+                    .dropna()
+                    .value_counts()
+                    .sort_index()
+                )
+
+                st.bar_chart(
+                    chart_data
+                )
+
+            elif chart_type == "bar":
+
+                category = visualization["category"]
+                value = visualization["value"]
+
+                chart_data = (
+                    df.groupby(category)[value]
+                    .sum()
+                    .sort_values(
+                        ascending=False
+                    )
+                )
+
+                st.write(
+                    f"{value} by {category}"
+                )
+
+                st.bar_chart(
+                    chart_data
+                )
+
+            elif chart_type == "line":
+
+                date_column = visualization["date"]
+                value_column = visualization["value"]
+
+                chart_data = df[
+                    [date_column, value_column]
+                ].copy()
+
+                chart_data[date_column] = pd.to_datetime(
+                    chart_data[date_column],
+                    errors="coerce"
+                )
+
+                chart_data = chart_data.dropna()
+
+                chart_data = (
+                    chart_data
+                    .sort_values(date_column)
+                    .set_index(date_column)
+                )
+
+                st.write(
+                    f"{value_column} over {date_column}"
+                )
+
+                st.line_chart(
+                    chart_data[value_column]
+                )
+
+            elif chart_type == "scatter":
+
+                x_column = visualization["x"]
+                y_column = visualization["y"]
+
+                chart_data = df[
+                    [x_column, y_column]
+                ].dropna()
+
+                st.write(
+                    f"{y_column} vs {x_column}"
+                )
+
+                st.scatter_chart(
+                    chart_data,
+                    x=x_column,
+                    y=y_column
+                )
 
     st.divider()
 
@@ -303,6 +421,56 @@ Keep the recommendations simple and concise.
                         value=f"{result:,.2f}"
                     )
 
+                    chart_type = choose_chart_type(
+                        df,
+                        column
+                    )
+
+                    if chart_type == "histogram":
+
+                        st.subheader("Distribution")
+
+                        st.bar_chart(
+                            df[column]
+                            .dropna()
+                            .value_counts()
+                            .sort_index()
+                        )
+
+                    elif chart_type == "bar":
+
+                        st.subheader(
+                            "Category Distribution"
+                        )
+
+                        st.bar_chart(
+                            df[column]
+                            .value_counts()
+                        )
+
+                    elif chart_type == "line":
+
+                        st.subheader("Trend")
+
+                        chart_data = df[
+                            [column]
+                        ].copy()
+
+                        chart_data[column] = pd.to_datetime(
+                            chart_data[column],
+                            errors="coerce"
+                        )
+
+                        chart_data = chart_data.dropna()
+
+                        chart_data = chart_data.set_index(
+                            column
+                        )
+
+                        st.line_chart(
+                            chart_data
+                        )
+
                     explanation_prompt = f"""
 You are a professional data analyst.
 
@@ -321,6 +489,7 @@ The actual result calculated from the dataset is:
 Explain the result in one or two simple sentences.
 
 Use the exact meaning of the column name.
+
 Do not invent information that is not present in the data.
 
 Do not mention Python, Gemini, prompts, or internal instructions.
@@ -376,6 +545,7 @@ Do not mention Python, Gemini, prompts, or internal instructions.
                         st.error(
                             "Ranking not supported."
                         )
+
                         st.stop()
 
                     st.subheader("Result")
@@ -501,6 +671,7 @@ The top {n} results are:
 Explain the results in two or three simple sentences.
 
 Use the exact meaning of the column names.
+
 Do not invent information that is not present in the data.
 
 Do not mention Python, Gemini, prompts, or internal instructions.
@@ -566,3 +737,278 @@ Do not mention Python, Gemini, prompts, or internal instructions.
         st.info(
             "No analysis history yet."
         )
+
+    st.divider()
+
+    st.subheader("Download Analysis Report")
+
+
+    def create_pdf_report(df):
+
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import (
+            SimpleDocTemplate,
+            Paragraph,
+            Spacer,
+            Table,
+            TableStyle
+        )
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+
+        buffer = BytesIO()
+
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=40,
+            leftMargin=40,
+            topMargin=40,
+            bottomMargin=40
+        )
+
+        styles = getSampleStyleSheet()
+
+        story = []
+
+        title_style = styles["Title"]
+        heading_style = styles["Heading2"]
+        normal_style = styles["BodyText"]
+
+        story.append(
+            Paragraph(
+                "AI Data Analyst Report",
+                title_style
+            )
+        )
+
+        story.append(
+            Spacer(1, 20)
+        )
+
+        story.append(
+            Paragraph(
+                f"Rows: {df.shape[0]}",
+                normal_style
+            )
+        )
+
+        story.append(
+            Paragraph(
+                f"Columns: {df.shape[1]}",
+                normal_style
+            )
+        )
+
+        story.append(
+            Spacer(1, 15)
+        )
+
+        story.append(
+            Paragraph(
+                "Dataset Columns",
+                heading_style
+            )
+        )
+
+        for column in df.columns:
+
+            story.append(
+                Paragraph(
+                    str(column),
+                    normal_style
+                )
+            )
+
+        story.append(
+            Spacer(1, 15)
+        )
+
+        quality = data_quality_analysis(df)
+
+        story.append(
+            Paragraph(
+                "Data Quality",
+                heading_style
+            )
+        )
+
+        story.append(
+            Paragraph(
+                f"Duplicate rows: "
+                f"{quality['duplicate_rows']}",
+                normal_style
+            )
+        )
+
+        if len(quality["missing_values"]) == 0:
+
+            story.append(
+                Paragraph(
+                    "Missing values: None",
+                    normal_style
+                )
+            )
+
+        else:
+
+            missing_data = [
+                ["Column", "Missing Values"]
+            ]
+
+            for column, count in quality[
+                "missing_values"
+            ].items():
+
+                missing_data.append([
+                    str(column),
+                    str(count)
+                ])
+
+            table = Table(
+                missing_data,
+                colWidths=[
+                    3 * inch,
+                    1.5 * inch
+                ]
+            )
+
+            table.setStyle(
+                TableStyle([
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        colors.lightgrey
+                    ),
+                    (
+                        "GRID",
+                        (0, 0),
+                        (-1, -1),
+                        1,
+                        colors.black
+                    ),
+                    (
+                        "PADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6
+                    )
+                ])
+            )
+
+            story.append(table)
+
+        story.append(
+            Spacer(1, 15)
+        )
+
+        story.append(
+            Paragraph(
+                "Cleaning Recommendations",
+                heading_style
+            )
+        )
+
+        recommendations = cleaning_recommendations(df)
+
+        for recommendation in recommendations:
+
+            story.append(
+                Paragraph(
+                    str(recommendation),
+                    normal_style
+                )
+            )
+
+            story.append(
+                Spacer(1, 5)
+            )
+
+        story.append(
+            Spacer(1, 15)
+        )
+
+        story.append(
+            Paragraph(
+                "Analysis History",
+                heading_style
+            )
+        )
+
+        if st.session_state["analysis_history"]:
+
+            for item in st.session_state[
+                "analysis_history"
+            ]:
+
+                story.append(
+                    Paragraph(
+                        f"Question: "
+                        f"{item['question']}",
+                        normal_style
+                    )
+                )
+
+                story.append(
+                    Paragraph(
+                        f"Result: "
+                        f"{item['result']}",
+                        normal_style
+                    )
+                )
+
+                story.append(
+                    Spacer(1, 8)
+                )
+
+        else:
+
+            story.append(
+                Paragraph(
+                    "No analysis questions have been asked yet.",
+                    normal_style
+                )
+            )
+
+        if st.session_state["ai_insights"]:
+
+            story.append(
+                Spacer(1, 15)
+            )
+
+            story.append(
+                Paragraph(
+                    "AI Dataset Insights",
+                    heading_style
+                )
+            )
+
+            insights = (
+                st.session_state["ai_insights"]
+                .replace("\n", "<br/>")
+            )
+
+            story.append(
+                Paragraph(
+                    insights,
+                    normal_style
+                )
+            )
+
+        document.build(story)
+
+        buffer.seek(0)
+
+        return buffer
+
+
+    pdf_file = create_pdf_report(df)
+
+    st.download_button(
+        label="Download PDF Report",
+        data=pdf_file,
+        file_name="ai_data_analyst_report.pdf",
+        mime="application/pdf"
+    )
