@@ -7,7 +7,9 @@ load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
 
-client = genai.Client(api_key=api_key)
+client = genai.Client(
+    api_key=api_key
+)
 
 
 def ask_ai(prompt):
@@ -25,11 +27,29 @@ def ask_ai(prompt):
 
         except Exception as e:
 
-            if "503" in str(e) and attempt < 2:
+            error_message = str(e)
+
+            if (
+                "429" in error_message
+                or "RESOURCE_EXHAUSTED" in error_message
+            ):
+
+                return (
+                    "AI response temporarily unavailable. "
+                    "The Gemini API quota has been exceeded. "
+                    "Please try again after the quota resets."
+                )
+
+            if "503" in error_message and attempt < 2:
+
                 time.sleep(3)
+
                 continue
 
-            raise e
+            return (
+                "AI service is temporarily unavailable. "
+                "Please try again later."
+            )
 
 
 def create_dataset_summary(df):
