@@ -6,7 +6,7 @@ openpyxl
 scipy
 matplotlib
 seaborn
-google-generativeai
+google-genai
 python-dotenv
 reportlab
 xlsxwriter
